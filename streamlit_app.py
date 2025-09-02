@@ -365,9 +365,9 @@ def main():
     if page == "🏠 Home":
         show_home_page()
     elif page == "👤 Single Patient Prediction":
-        show_single_prediction_page(model)
+        show_single_prediction_page(model, model_data)
     elif page == "📊 Batch Prediction":
-        show_batch_prediction_page(model)
+        show_batch_prediction_page(model, model_data)
     elif page == "📈 Data Visualization":
         show_visualization_page()
     elif page == "ℹ️ About":
@@ -428,7 +428,7 @@ def show_home_page():
     - Other clinical indicators
     """)
 
-def show_single_prediction_page(model):
+def show_single_prediction_page(model, model_data=None):
     """Show single patient prediction page"""
     st.header("👤 Single Patient Prediction")
 
@@ -586,7 +586,7 @@ def show_single_prediction_page(model):
                     for i, suggestion in enumerate(result['clinical_suggestions'], 1):
                         st.write(f"{i}. {suggestion}")
 
-def show_batch_prediction_page(model):
+def show_batch_prediction_page(model, model_data=None):
     """Show batch prediction page"""
     st.header("📊 Batch Prediction")
 
