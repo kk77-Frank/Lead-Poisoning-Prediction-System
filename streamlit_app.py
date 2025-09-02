@@ -443,22 +443,22 @@ def show_single_prediction_page(model):
 
         with col2:
             st.subheader("Clinical Data")
-            blood_lead = st.number_input("入院时血铅水平（umol/L）", min_value=0.0, value=2.5, step=0.1)
-            hemoglobin = st.number_input("血红蛋白（g/L）", min_value=0.0, value=130.0, step=1.0)
-            blood_calcium = st.number_input("血钙（mmol/L）", min_value=0.0, value=2.3, step=0.1)
+            blood_lead = st.number_input("Admission Blood Lead Level (umol/L)", min_value=0.0, value=2.5, step=0.1)
+            hemoglobin = st.number_input("Hemoglobin (g/L)", min_value=0.0, value=130.0, step=1.0)
+            blood_calcium = st.number_input("Blood Calcium (mmol/L)", min_value=0.0, value=2.3, step=0.1)
             
         col3, col4 = st.columns(2)
         with col3:
             st.subheader("Symptoms")
-            abdominal_pain = st.selectbox("腹痛", [0, 1], format_func=lambda x: "无" if x == 0 else "有")
-            abdominal_tenderness = st.selectbox("腹部压痛", [0, 1], format_func=lambda x: "无" if x == 0 else "有")
-            hair_loss = st.selectbox("头发稀少", [0, 1], format_func=lambda x: "无" if x == 0 else "有")
+            abdominal_pain = st.selectbox("Abdominal Pain", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
+            abdominal_tenderness = st.selectbox("Abdominal Tenderness", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
+            hair_loss = st.selectbox("Hair Loss", [0, 1], format_func=lambda x: "No" if x == 0 else "Yes")
             
         with col4:
             st.subheader("Other Factors")
-            total_bilirubin = st.number_input("总胆红素", min_value=0.0, value=15.0, step=0.1)
-            detox_amount = st.number_input("本次住院期间使用的解毒剂总量（g）", min_value=0.0, value=2.5, step=0.1)
-            risk_score_input = st.number_input("铅中毒风险评分", min_value=0.0, value=3.0, step=0.1)
+            total_bilirubin = st.number_input("Total Bilirubin", min_value=0.0, value=15.0, step=0.1)
+            detox_amount = st.number_input("Total Detoxification Agent Used (g)", min_value=0.0, value=2.5, step=0.1)
+            risk_score_input = st.number_input("Lead Poisoning Risk Score", min_value=0.0, value=3.0, step=0.1)
 
         st.subheader("Additional Features")
         st.info("The model requires 39 features. The remaining features will be set to default values.")
@@ -471,23 +471,23 @@ def show_single_prediction_page(model):
                 # 创建特征字典，映射真实特征名到输入值
                 feature_dict = {}
                 for feature_name in REAL_FEATURE_NAMES:
-                    if feature_name == "腹痛":
+                    if "腹痛" in feature_name:
                         feature_dict[feature_name] = abdominal_pain
-                    elif feature_name == "入院时血铅水平（umol/L）":
+                    elif "入院时血铅水平" in feature_name and "（umol/L）" in feature_name:
                         feature_dict[feature_name] = blood_lead
-                    elif feature_name == "总胆红素":
+                    elif "总胆红素" in feature_name:
                         feature_dict[feature_name] = total_bilirubin
-                    elif feature_name == "本次住院期间使用的解毒剂总量（g）":
+                    elif "解毒剂总量" in feature_name and "（g）" in feature_name:
                         feature_dict[feature_name] = detox_amount
-                    elif feature_name == "铅中毒风险评分":
+                    elif "铅中毒风险评分" in feature_name:
                         feature_dict[feature_name] = risk_score_input
-                    elif feature_name == "腹部压痛":
+                    elif "腹部压痛" in feature_name:
                         feature_dict[feature_name] = abdominal_tenderness
-                    elif feature_name == "血红蛋白（g/L）":
+                    elif "血红蛋白" in feature_name and "（g/L）" in feature_name:
                         feature_dict[feature_name] = hemoglobin
-                    elif feature_name == "血钙（mmol/L）":
+                    elif "血钙" in feature_name and "（mmol/L）" in feature_name:
                         feature_dict[feature_name] = blood_calcium
-                    elif feature_name == "头发稀少":
+                    elif "头发稀少" in feature_name:
                         feature_dict[feature_name] = hair_loss
                     else:
                         # 对于其他特征，使用基于输入数据的计算值或默认值
@@ -508,9 +508,14 @@ def show_single_prediction_page(model):
                 # 尝试使用工具库进行预测
                 try:
                     from lead_poisoning_prediction_utils import predict_risk
-                    results, risk_proba = predict_risk(model, patient_data, REAL_FEATURE_NAMES, 
-                                                     model_data.get('scaler') if model_data else None, 
-                                                     model_data.get('optimal_threshold', 0.5) if model_data else 0.5)
+                    # 确保model_data存在且不为None
+                    scaler = None
+                    threshold = 0.5
+                    if model_data and isinstance(model_data, dict):
+                        scaler = model_data.get('scaler')
+                        threshold = model_data.get('optimal_threshold', 0.5)
+                    
+                    results, risk_proba = predict_risk(model, patient_data, REAL_FEATURE_NAMES, scaler, threshold)
                     
                     if results is not None and len(risk_proba) > 0:
                         result = {
@@ -522,7 +527,7 @@ def show_single_prediction_page(model):
                         result = None
                 except ImportError as e:
                     # 如果无法导入工具库，使用备用方法
-                    st.warning("高级预测功能不可用，使用基础预测方法")
+                    st.warning("Advanced prediction functionality unavailable, using basic prediction method")
                     # 转换为特征数组并使用基础预测
                     features = np.zeros(39)
                     for i, feature_name in enumerate(REAL_FEATURE_NAMES[:39]):
@@ -531,7 +536,7 @@ def show_single_prediction_page(model):
                     result = predict_single_patient(model, features)
                 except Exception as e:
                     # 其他错误也使用备用方法
-                    st.warning(f"高级预测功能出现错误: {str(e)}，使用基础预测方法")
+                    st.warning(f"Advanced prediction error: {str(e)}, using basic prediction method")
                     features = np.zeros(39)
                     for i, feature_name in enumerate(REAL_FEATURE_NAMES[:39]):
                         if feature_name in feature_dict:
@@ -598,48 +603,48 @@ def show_batch_prediction_page(model):
             # 使用真实特征名称创建模板
             template_data = {'Name': ['Patient1', 'Patient2', 'Patient3']}
             
-            # 为每个真实特征创建示例数据
+            # Create sample data for each real feature
             for feature_name in REAL_FEATURE_NAMES:
                 if "腹痛" in feature_name or "腹部压痛" in feature_name or "头发稀少" in feature_name or "住宅附近有无铅作业工厂" in feature_name:
-                    # 二元特征 (0 或 1)
+                    # Binary features (0 or 1)
                     template_data[feature_name] = [0, 1, 0]
                 elif "入院时血铅水平" in feature_name and "_to_" not in feature_name and "_log" not in feature_name and "poly_" not in feature_name:
-                    # 血铅水平
+                    # Blood lead level
                     template_data[feature_name] = [2.5, 3.8, 1.9]
                 elif "血红蛋白" in feature_name and "_to_" not in feature_name and "poly_" not in feature_name:
-                    # 血红蛋白
+                    # Hemoglobin
                     template_data[feature_name] = [130, 125, 140]
                 elif "血钙" in feature_name and "_to_" not in feature_name and "poly_" not in feature_name:
-                    # 血钙
+                    # Blood calcium
                     template_data[feature_name] = [2.3, 2.1, 2.4]
                 elif "总胆红素" in feature_name and "_to_" not in feature_name:
-                    # 总胆红素
+                    # Total bilirubin
                     template_data[feature_name] = [15.2, 18.6, 12.4]
                 elif "解毒剂总量" in feature_name:
-                    # 解毒剂总量
+                    # Total detoxification amount
                     template_data[feature_name] = [2.5, 5.0, 1.8]
                 elif "风险评分" in feature_name:
-                    # 风险评分
+                    # Risk score
                     template_data[feature_name] = [3.2, 4.8, 2.1]
                 elif "WHO" in feature_name:
-                    # WHO相关指标
+                    # WHO related indicators
                     template_data[feature_name] = [1.2, 2.1, 0.8]
                 elif "ratio" in feature_name:
-                    # 比率特征
+                    # Ratio features
                     template_data[feature_name] = [np.round(np.random.uniform(0.5, 2.0), 3) for _ in range(3)]
                 elif "poly_" in feature_name:
-                    # 多项式特征
+                    # Polynomial features
                     template_data[feature_name] = [np.round(np.random.uniform(0.1, 1.0), 3) for _ in range(3)]
                 elif "_log" in feature_name:
-                    # 对数特征
+                    # Logarithmic features
                     template_data[feature_name] = [np.round(np.random.uniform(0.5, 1.5), 3) for _ in range(3)]
                 else:
-                    # 其他特征的默认值
+                    # Default values for other features
                     template_data[feature_name] = [np.round(np.random.uniform(0.1, 1.0), 3) for _ in range(3)]
             
             template_df = pd.DataFrame(template_data)
         else:
-            # 备用模板（如果无法获取真实特征名）
+            # Backup template (if real feature names cannot be obtained)
             template_data = {
                 'Name': ['Patient1', 'Patient2', 'Patient3'],
                 'Gender': [1, 2, 1],
@@ -649,8 +654,8 @@ def show_batch_prediction_page(model):
                 'Admission_Count': [1, 2, 1]
             }
             
-            # Add other feature columns (总共39个特征)
-            for i in range(33):  # 已有6个特征，再添加33个达到39个
+            # Add other feature columns (total 39 features)
+            for i in range(33):  # Already have 6 features, add 33 more to reach 39
                 template_data[f'Feature_{i+7}'] = [np.random.uniform(0, 1), np.random.uniform(0, 1), np.random.uniform(0, 1)]
             
             template_df = pd.DataFrame(template_data)
