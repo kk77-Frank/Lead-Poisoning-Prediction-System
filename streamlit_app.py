@@ -9,15 +9,36 @@ import io
 from datetime import datetime
 import traceback
 
-# 导入修复后的工具库
+# 导入工具库（多重备用方案）
+FIXED_UTILS_AVAILABLE = False
+DEPLOYMENT_UTILS_AVAILABLE = False
+REAL_FEATURE_NAMES = []
+
+# 首先尝试加载主工具库
 try:
-    from lead_poisoning_prediction_utils_fixed import load_saved_model, get_feature_names
+    from lead_poisoning_prediction_utils import load_saved_model, get_feature_names
     FIXED_UTILS_AVAILABLE = True
     REAL_FEATURE_NAMES = get_feature_names()
-except ImportError:
-    FIXED_UTILS_AVAILABLE = False
-    REAL_FEATURE_NAMES = []
-    print("警告: 修复版工具库不可用，使用基础功能")
+    st.info("✅ 高级工具库加载成功")
+except ImportError as e:
+    print(f"主工具库不可用: {e}")
+except Exception as e:
+    print(f"主工具库加载错误: {e}")
+
+# 如果主工具库不可用，尝试部署工具库
+if not FIXED_UTILS_AVAILABLE:
+    try:
+        from deployment_utils import load_model_safe, predict_single_safe, get_risk_interpretation
+        DEPLOYMENT_UTILS_AVAILABLE = True
+        st.info("✅ 部署工具库加载成功")
+    except ImportError as e:
+        print(f"部署工具库不可用: {e}")
+    except Exception as e:
+        print(f"部署工具库加载错误: {e}")
+
+# 如果都不可用，显示警告
+if not FIXED_UTILS_AVAILABLE and not DEPLOYMENT_UTILS_AVAILABLE:
+    st.warning("⚠️ 高级工具库不可用，使用基础功能")
 
 # Page configuration
 st.set_page_config(
@@ -83,12 +104,23 @@ def load_model():
                 return model, model_data
             else:
                 return None, None
+        elif DEPLOYMENT_UTILS_AVAILABLE:
+            # 使用部署工具库加载
+            model, model_info = load_model_safe('lead_poisoning_optimized_model.pkl')
+            if model is not None:
+                return model, model_info
+            else:
+                return None, None
         else:
             # 使用原有方法加载
             try:
                 model_data = joblib.load('lead_poisoning_optimized_model.pkl')
                 if isinstance(model_data, dict):
-                    model = model_data.get('model', model_data)
+                    model = model_data.get('model', None)
+                    # 确保模型对象不为None
+                    if model is None:
+                        st.error("模型文件中没有找到有效的模型对象")
+                        return None, None
                     return model, model_data
                 else:
                     return model_data, None
@@ -97,7 +129,11 @@ def load_model():
                 with open('lead_poisoning_optimized_model.pkl', 'rb') as f:
                     model_data = pickle.load(f)
                 if isinstance(model_data, dict):
-                    model = model_data.get('model', model_data)
+                    model = model_data.get('model', None)
+                    # 确保模型对象不为None
+                    if model is None:
+                        st.error("模型文件中没有找到有效的模型对象")
+                        return None, None
                     return model, model_data
                 else:
                     return model_data, None
@@ -306,9 +342,16 @@ def main():
         with st.expander("📊 Model Information"):
             st.write(f"**Model Type:** {type(model).__name__}")
             if 'selected_features' in model_data:
-                st.write(f"**Features Count:** {len(model_data['selected_features'])}")
+                features = model_data['selected_features']
+                st.write(f"**Features Count:** {len(features) if features else 0}")
+                if features and len(features) > 0:
+                    st.write(f"**Sample Features:** {', '.join(features[:5])}")
             if 'optimal_threshold' in model_data:
                 st.write(f"**Optimal Threshold:** {model_data['optimal_threshold']:.4f}")
+            if 'interpretability_system' in model_data:
+                st.write(f"**Has Interpretability System:** ✅")
+            # 显示模型数据键
+            st.write(f"**Available Data Keys:** {list(model_data.keys())}")
     else:
         st.info("📋 Using basic model (no additional metadata available)")
     
@@ -462,20 +505,38 @@ def show_single_prediction_page(model):
                 # 转换为DataFrame用于预测
                 patient_data = pd.DataFrame([feature_dict])
                 
-                # 使用修复版工具库进行预测
-                from lead_poisoning_prediction_utils_fixed import predict_risk
-                results, risk_proba = predict_risk(model, patient_data, REAL_FEATURE_NAMES, 
-                                                 model_data.get('scaler') if model_data else None, 
-                                                 model_data.get('optimal_threshold', 0.5) if model_data else 0.5)
-                
-                if results is not None and len(risk_proba) > 0:
-                    result = {
-                        'risk_score': round(risk_proba[0] * 100, 2),
-                        'risk_level': get_risk_level_english(risk_proba[0]),
-                        'clinical_suggestions': get_clinical_suggestions_english(risk_proba[0])
-                    }
-                else:
-                    result = None
+                # 尝试使用工具库进行预测
+                try:
+                    from lead_poisoning_prediction_utils import predict_risk
+                    results, risk_proba = predict_risk(model, patient_data, REAL_FEATURE_NAMES, 
+                                                     model_data.get('scaler') if model_data else None, 
+                                                     model_data.get('optimal_threshold', 0.5) if model_data else 0.5)
+                    
+                    if results is not None and len(risk_proba) > 0:
+                        result = {
+                            'risk_score': round(risk_proba[0] * 100, 2),
+                            'risk_level': get_risk_level_english(risk_proba[0]),
+                            'clinical_suggestions': get_clinical_suggestions_english(risk_proba[0])
+                        }
+                    else:
+                        result = None
+                except ImportError as e:
+                    # 如果无法导入工具库，使用备用方法
+                    st.warning("高级预测功能不可用，使用基础预测方法")
+                    # 转换为特征数组并使用基础预测
+                    features = np.zeros(39)
+                    for i, feature_name in enumerate(REAL_FEATURE_NAMES[:39]):
+                        if feature_name in feature_dict:
+                            features[i] = feature_dict[feature_name]
+                    result = predict_single_patient(model, features)
+                except Exception as e:
+                    # 其他错误也使用备用方法
+                    st.warning(f"高级预测功能出现错误: {str(e)}，使用基础预测方法")
+                    features = np.zeros(39)
+                    for i, feature_name in enumerate(REAL_FEATURE_NAMES[:39]):
+                        if feature_name in feature_dict:
+                            features[i] = feature_dict[feature_name]
+                    result = predict_single_patient(model, features)
             else:
                 # 备用方法：使用简单特征数组
                 features = np.zeros(39)
